@@ -7,3 +7,8 @@ The model from this repository is used in Flutter. See the demo here: [YouTube D
 <p align="center">
   <img src="screen.png">
 </p>
+
+## Training Result
+<p align="center">
+  <img src="result.png">
+</p>

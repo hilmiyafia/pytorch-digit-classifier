@@ -1,4 +1,5 @@
 import torchvision.transforms as transforms
+import torchinfo
 import torch.onnx
 import torch
 import numpy
@@ -8,17 +9,15 @@ import os
 
 """ CREATE MODEl """
 model = torch.nn.Sequential()
-model.append(torch.nn.Conv2d(1, 2, 3))
+model.append(torch.nn.Conv2d(1, 3, 3))
 model.append(torch.nn.ReLU())
 model.append(torch.nn.MaxPool2d(2))
-model.append(torch.nn.Conv2d(2, 4, 3))
+model.append(torch.nn.Conv2d(3, 6, 3))
 model.append(torch.nn.ReLU())
 model.append(torch.nn.MaxPool2d(2))
-model.append(torch.nn.Conv2d(4, 8, 3))
-model.append(torch.nn.ReLU())
-model.append(torch.nn.MaxPool2d(2))
-model.append(torch.nn.Conv2d(8, 10, 2))
+model.append(torch.nn.Conv2d(6, 10, 2))
 model.append(torch.nn.Flatten())
+torchinfo.summary(model, (1, 16, 16))
 
 """ LOAD DATA """
 data = []
@@ -35,18 +34,18 @@ optimizer = torch.optim.Adagrad(model.parameters())
 loss = torch.nn.CrossEntropyLoss()
 
 """ CREATE LABELS """
-target = torch.arange(10, dtype=torch.long)
+target = torch.arange(10, dtype=torch.long).cuda()
 
 """ CREATE AUGMENTATION FUNCTION """
 augment = torch.nn.Sequential()
 augment.append(transforms.RandomPerspective())
-augment.append(transforms.Resize((32, 32)))
+augment.append(transforms.Resize((16, 16)))
 
 """ TRAINING """
 bar = tqdm.tqdm(range(1000))
 for j in bar:
     optimizer.zero_grad()
-    output = model(augment(data))
+    output = model(augment(data).cuda())
     error = loss(output, target)
     error.backward()
     bar.set_postfix(loss=f"{error.item():.4f}")
@@ -56,7 +55,7 @@ for j in bar:
 print("Confusion Matrix")
 matrix = numpy.zeros((10, 10))
 for j in range(1000):
-    output = model(augment(data))
+    output = model(augment(data).cuda())
     index = output.argmax(1)
     for l in range(10):
         matrix[l, index[l].item()] += 1
@@ -66,5 +65,5 @@ accuracy = numpy.sum(numpy.eye(10) * matrix) / numpy.sum(matrix)
 print(f"Accuracy: {accuracy * 100:.2f}%")
 
 """ EXPORT MODEL """
-dummy = torch.randn(1, 1, 32, 32)
+dummy = torch.randn(1, 1, 16, 16)
 torch.onnx.export(model, dummy, "model.onnx", verbose=True)
