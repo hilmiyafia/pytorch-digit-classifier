@@ -10,20 +10,42 @@ import os
 
 """ CREATE MODEl """
 model = torch.nn.Sequential(
-    torch.nn.Conv2d(1, 3, 3), torch.nn.ReLU(), torch.nn.MaxPool2d(2),
-    torch.nn.Conv2d(3, 6, 3), torch.nn.ReLU(), torch.nn.MaxPool2d(2),
-    torch.nn.Conv2d(6, 10, 2), torch.nn.Flatten()).cuda()
+    torch.nn.Conv2d(1, 3, 3),
+    torch.nn.ReLU6(), 
+    torch.nn.MaxPool2d(2),
+    torch.nn.Conv2d(3, 6, 3),
+    torch.nn.ReLU6(), 
+    torch.nn.MaxPool2d(2),
+    torch.nn.Conv2d(6, 10, 2),
+    torch.nn.Flatten()).cuda()
 torchinfo.summary(model, (1, 16, 16))
 
 """ LOAD DATA """
 data = []
 for i in range(10):
     image = cv2.imread(f"images/{i}.png") / 255
+    height, width, _ = image.shape
+    pad_top, pad_bottom, pad_left, pad_right = 0, 0, 0, 0
+    if width > height:
+        pad_top = (width - height) // 2
+        pad_bottom = width - height - pad_top
+    else:
+        pad_left = (height - width) // 2
+        pad_right = height - width - pad_left
+    image = cv2.copyMakeBorder(
+        image, 
+        pad_top, 
+        pad_bottom, 
+        pad_left, 
+        pad_right, 
+        cv2.BORDER_CONSTANT, 
+        value=0)
+    image = cv2.resize(image, (64, 64))
     data.append([numpy.max(image, -1)])
 data = torch.FloatTensor(numpy.stack(data)).cuda()
 
 """ CREATE OPTIMIZER """
-optimizer = torch.optim.Adagrad(model.parameters())
+optimizer = torch.optim.AdamW(model.parameters(), 2e-4)
 
 """ CREATE LOSS FUNCTION """
 loss = torch.nn.CrossEntropyLoss()
@@ -33,11 +55,11 @@ target = torch.arange(10, dtype=torch.long).cuda()
 
 """ CREATE AUGMENTATION FUNCTION """
 augment = torch.nn.Sequential(
-    transforms.RandomPerspective(p=0.2),
+    transforms.RandomPerspective(),
     transforms.Resize((16, 16))).cuda()
 
 """ TRAINING """
-bar = tqdm.tqdm(range(1000))
+bar = tqdm.tqdm(range(10000))
 for j in bar:
     optimizer.zero_grad()
     output = model(augment(data))
@@ -60,7 +82,7 @@ accuracy = numpy.sum(numpy.eye(10) * matrix) / numpy.sum(matrix)
 print(f"Accuracy: {accuracy * 100:.2f}%")
 
 """ EXPORT MODEL """
-dummy = torch.randn(1, 1, 16, 16)
-torch.onnx.export(model, dummy, "m.onnx", verbose=True)
+dummy = torch.randn(1, 1, 16, 16).cuda()
+torch.onnx.export(model, dummy, "m.onnx", verbose=True, dynamo=False, opset_version=12)
 subprocess.call(["onnxsim", "m.onnx", "model.onnx"])
 os.remove("m.onnx")
