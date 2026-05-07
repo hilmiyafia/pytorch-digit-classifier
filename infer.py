@@ -4,6 +4,8 @@ import time
 net = cv2.dnn.readNetFromONNX("model.onnx")
 video = cv2.VideoCapture("video.mp4")
 
+smoothed = 0
+
 while True:
     retval, display = video.read()
     if retval == False: break
@@ -34,6 +36,7 @@ while True:
 
     number = ""
     outputs = []
+    average = 0
     for segment in segments:
         x, y, w, h = segment
         buffer = frame[y:y + h, x:x + w]
@@ -57,7 +60,7 @@ while True:
         start_time = time.perf_counter()
         result = net.forward()
         end_time = time.perf_counter()
-        inference_time = int((end_time - start_time) * 1000000)
+        average += (end_time - start_time) * 1000000
         min, max, min_loc, max_loc = cv2.minMaxLoc(result)
         number += str(max_loc[0])
         x1 = x / new_width
@@ -68,6 +71,10 @@ while True:
         p1 = (int(x1 * width), int(y1 * height))
         p2 = (int(x2 * width), int(y2 * height))
         cv2.rectangle(display, p1, p2, (255, 0, 0), 2)
+
+    if len(segments) > 0:
+        average /= len(segments)
+        smoothed = 0.99 * smoothed + 0.01 * average
 
     cv2.putText(
         display, 
@@ -80,7 +87,7 @@ while True:
     
     cv2.putText(
         display, 
-        text=f"Inference time: {inference_time} us", 
+        text=f"Inference time: {int(smoothed)} us", 
         org=(20, 100), 
         fontFace=cv2.FONT_HERSHEY_SIMPLEX, 
         fontScale=1, 
